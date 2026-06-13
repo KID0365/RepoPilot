@@ -18,4 +18,5 @@ dist/
 .pytest_cache/
 .tmp/
 .test-runtime/
+private/
 .idea/
