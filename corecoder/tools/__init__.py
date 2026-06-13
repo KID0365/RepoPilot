@@ -7,6 +7,9 @@ from .edit import EditFileTool
 from .glob_tool import GlobTool
 from .grep import GrepTool
 from .agent import AgentTool
+from .repo_map import RepoMapTool
+from .entry_detector import EntryDetectorTool
+from .env_checker import EnvCheckerTool
 
 ALL_TOOLS = [
     BashTool(),
@@ -16,6 +19,9 @@ ALL_TOOLS = [
     GlobTool(),
     GrepTool(),
     AgentTool(),
+    RepoMapTool(),
+    EntryDetectorTool(),
+    EnvCheckerTool(),
 ]
 
 

@@ -9,7 +9,7 @@ from corecoder.tools import ALL_TOOLS, get_tool
 
 
 def test_tool_count():
-    assert len(ALL_TOOLS) == 7
+    assert len(ALL_TOOLS) == 10
 
 
 def test_all_tools_have_valid_schema():
@@ -185,3 +185,32 @@ def test_agent_tool_schema():
     s = agent_t.schema()
     assert s["function"]["name"] == "agent"
     assert "task" in s["function"]["parameters"]["properties"]
+
+
+# --- ReproCoder static analysis tools ---
+
+def test_repo_map_tool(tmp_path):
+    (tmp_path / "train.py").write_text("import torch\n\ndef train():\n    pass\n")
+    result = get_tool("repo_map").execute(root_path=str(tmp_path))
+    assert "# Repository Map" in result
+    assert "train.py" in result
+    assert "`train`" in result
+
+
+def test_entry_detector_tool(tmp_path):
+    (tmp_path / "train.py").write_text(
+        "import argparse\n\ndef train():\n    pass\n\n"
+        'if __name__ == "__main__":\n    train()\n'
+    )
+    result = get_tool("entry_detector").execute(root_path=str(tmp_path))
+    assert "training" in result
+    assert "high" in result
+
+
+def test_env_checker_tool(tmp_path):
+    (tmp_path / "requirements.txt").write_text("torch==2.2.0\nnumpy>=1.24\n")
+    (tmp_path / "README.md").write_text("Python 3.10, CUDA 12.1, download checkpoint\n")
+    result = get_tool("env_checker").execute(root_path=str(tmp_path))
+    assert "# Environment Check" in result
+    assert "torch" in result
+    assert "CUDA" in result
