@@ -1,9 +1,9 @@
-# ReproCoder One-shot Demo Prompts
+# RepoPilot One-shot Demo Prompts
 
 ## Demo A：分析当前仓库
 
 ```text
-请仅做本地静态分析，使用 repo_map、entry_detector、env_checker 分析当前仓库，并生成 ReproCoder 科研代码复现诊断报告。
+请仅做本地静态分析，使用 repo_map、entry_detector、env_checker 分析当前仓库，并生成 RepoPilot 代码仓库诊断与复现规划报告。
 
 报告包括 Repository Overview、Entry Points、Environment Check、Reproduction Plan、Reproduction Risks、Suggested Fixes。
 
@@ -17,7 +17,7 @@
 ```text
 请仅做本地静态分析，使用 repo_map、entry_detector、env_checker 分析仓库 D:/repos/example-paper。
 
-请生成 ReproCoder 科研代码复现诊断报告，包含 Repository Overview、Entry Points、Environment Check、Reproduction Plan、Reproduction Risks、Suggested Fixes。
+请生成 RepoPilot AI/ML 开源仓库复现风险诊断报告，包含 Repository Overview、Entry Points、Environment Check、Reproduction Plan、Reproduction Risks、Suggested Fixes。
 
 请明确区分 confirmed facts、inferred assumptions 和 unresolved risks。不要执行训练、推理或数据预处理，不要运行危险命令，不要下载任何大文件，只根据仓库中的代码、配置和文档进行静态分析。
 ```

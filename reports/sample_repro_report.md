@@ -1,4 +1,4 @@
-# ReproCoder Sample Reproduction Report
+# RepoPilot Sample Reproduction Report
 
 ## Repository Overview
 
@@ -6,7 +6,7 @@
 
 - `repo_map` 识别到项目为 Python CLI Agent，核心包位于 `corecoder/`。
 - 项目使用 `pyproject.toml` 管理构建和依赖。
-- 仓库包含 README、测试目录以及 ReproCoder 的三个静态诊断工具。
+- 仓库包含 README、测试目录以及 RepoPilot 的三个静态诊断工具。
 
 **Inferred assumptions**
 

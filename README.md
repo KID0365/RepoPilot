@@ -1,206 +1,243 @@
-# CoreCoder
+# RepoPilot V0.1
 
-> Formerly **NanoCoder** — renamed to avoid confusion with [Nano-Collective/nanocoder](https://github.com/Nano-Collective/nanocoder). All links from the old repo redirect here automatically.
+*A lightweight agent for AI/ML codebase diagnosis and reproduction planning.*
 
+RepoPilot 是面向 AI/ML 开源代码仓库的诊断与复现规划 Agent。它通过本地静态分析识别仓库结构、运行入口、依赖环境以及数据集、权重、CUDA 和配置风险，并由 LLM 整理为可执行的复现计划与诊断报告。
 
-[![PyPI](https://img.shields.io/pypi/v/corecoder)](https://pypi.org/project/corecoder/)
-[![Python](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Tests](https://github.com/he-yufeng/CoreCoder/actions/workflows/ci.yml/badge.svg)](https://github.com/he-yufeng/CoreCoder/actions)
+> **Fork 说明：** 本项目基于 [CoreCoder](https://github.com/he-yufeng/CoreCoder) fork 二次开发。CoreCoder 由 [Yufeng He（何宇峰）](https://github.com/he-yufeng) 创建，提供了 Agent loop、LLM 适配、工具系统、上下文压缩和会话机制等核心架构。RepoPilot 在此基础上增加 AI/ML 开源仓库诊断与复现规划场景的 prompt、静态分析工具和项目文档，不宣称整体架构完全原创。
 
-[中文](README_CN.md) | [English](README.md) | [Claude Code Architecture Deep Dive (7 articles)](article/)
+上游 CoreCoder 的原始 README 已保存在 [`README_CORECODER.md`](README_CORECODER.md)。
 
-**512,000 lines of TypeScript → ~1,400 lines of Python.**
+## 项目定位
 
-I spent two days reverse-engineering the leaked Claude Code source — all half a million lines. Then I stripped it down to the load-bearing walls and rebuilt them in Python. The result: **every key architectural pattern from Claude Code, in a codebase you can read in one sitting.**
+RepoPilot 的目标不是自动完成昂贵训练，而是在复现前回答：
 
-CoreCoder is not another AI coding tool. It's a **blueprint** — the [nanoGPT](https://github.com/karpathy/nanoGPT) of coding agents. Read it, fork it, build your own.
+- 仓库包含哪些关键模块和配置？
+- 训练、推理、评估和 Demo 从哪里启动？
+- Python、PyTorch、CUDA 和依赖版本是否明确？
+- 数据集、checkpoint 和预训练权重需要如何准备？
+- 当前证据能否支持“可复现”，还存在哪些未验证风险？
 
----
+RepoPilot 默认只做本地静态诊断，不自动下载大文件，也不执行真实训练。
 
-```
-$ corecoder -m kimi-k2.5
+## Quick Start
 
-You > read main.py and fix the broken import
-
-  > read_file(file_path='main.py')
-  > edit_file(file_path='main.py', ...)
-
---- a/main.py
-+++ b/main.py
-@@ -1 +1 @@
--from utils import halper
-+from utils import helper
-
-Fixed: halper → helper.
-```
-
-## What You Get
-
-Claude Code's 512K lines distilled into ~1,400 lines across 7 patterns that actually matter:
-
-| Pattern | Claude Code | CoreCoder |
-|---|---|---|
-| Search-and-replace editing (unique match + diff) | FileEditTool | `tools/edit.py` — 70 lines |
-| Parallel tool execution | StreamingToolExecutor (530 lines) | `agent.py` — ThreadPool |
-| 3-layer context compression | HISTORY_SNIP → Microcompact → CONTEXT_COLLAPSE | `context.py` — 145 lines |
-| Sub-agent with isolated context | AgentTool (1,397 lines) | `tools/agent.py` — 50 lines |
-| Dangerous command blocking | BashTool (1,143 lines) | `tools/bash.py` — 95 lines |
-| Session persistence | QueryEngine (1,295 lines) | `session.py` — 65 lines |
-| Dynamic system prompt | prompts.ts (914 lines) | `prompt.py` — 35 lines |
-
-Every pattern is a real, runnable implementation — not a diagram or a blog post.
-
-## Install
+推荐先创建并激活虚拟环境：
 
 ```bash
-pip install corecoder
+python -m venv .venv
 ```
 
-Pick your model — any OpenAI-compatible API works. You can `export` env vars or drop a `.env` file in your project root:
+Linux/macOS：
 
 ```bash
-# Kimi K2.5
-export OPENAI_API_KEY=your-key OPENAI_BASE_URL=https://api.moonshot.ai/v1
-corecoder -m kimi-k2.5
+source .venv/bin/activate
+pip install -e .
+```
 
-# Claude Opus 4.6 (via OpenRouter)
-export OPENAI_API_KEY=your-key OPENAI_BASE_URL=https://openrouter.ai/api/v1
-corecoder -m anthropic/claude-opus-4-6
+Windows PowerShell：
 
-# OpenAI GPT-5
-export OPENAI_API_KEY=sk-...
-corecoder -m gpt-5
+```powershell
+.\.venv\Scripts\Activate.ps1
+pip install -e .
+```
 
-# DeepSeek V3
-export OPENAI_API_KEY=sk-... OPENAI_BASE_URL=https://api.deepseek.com
+复制 `.env.example` 为 `.env`，并填写自己的 OpenAI-compatible API Key。如果当前运行方式没有自动加载 `.env`，请手动设置环境变量。
+
+Linux/macOS bash：
+
+```bash
+export OPENAI_API_KEY="your-api-key-here"
+export OPENAI_BASE_URL="https://api.deepseek.com"
+export CORECODER_MODEL="deepseek-chat"
+```
+
+Windows PowerShell：
+
+```powershell
+$env:OPENAI_API_KEY = "your-api-key-here"
+$env:OPENAI_BASE_URL = "https://api.deepseek.com"
+$env:CORECODER_MODEL = "deepseek-chat"
+```
+
+启动交互模式：
+
+```bash
 corecoder -m deepseek-chat
-
-# Qwen 3.5
-export OPENAI_API_KEY=sk-... OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-corecoder -m qwen-max
-
-# Ollama (local)
-export OPENAI_API_KEY=ollama OPENAI_BASE_URL=http://localhost:11434/v1
-corecoder -m qwen3:32b
-
-# One-shot mode
-corecoder -p "add error handling to parse_config()"
 ```
 
-### Non-OpenAI providers (Bedrock, Vertex, Cohere, …)
+API Key 只应保存在本地 `.env` 或当前终端环境变量中，不要提交到 Git。
 
-For providers without an OpenAI-compatible endpoint, install the optional LiteLLM extra:
+## 为什么基于 CoreCoder
 
-```bash
-pip install 'corecoder[litellm]'
+CoreCoder 提供了一个简洁、可读的 Agent 核心，包括：
 
-export CORECODER_PROVIDER=litellm
-export CORECODER_MODEL=anthropic/claude-3-haiku   # any LiteLLM model string
-export ANTHROPIC_API_KEY=sk-ant-...
-corecoder
-```
+- CLI 和多轮 Agent loop
+- OpenAI-compatible 与 LiteLLM 调用
+- Function calling 工具系统
+- 并行工具执行
+- 上下文压缩
+- 会话保存和恢复
 
-LiteLLM routes through to 100+ providers (Bedrock, Vertex AI, Cohere, Groq, Replicate, Anyscale, etc.) using one model-string convention. The default `openai` backend is unchanged.
+RepoPilot 保留这些能力，在其上增加 AI/ML 开源仓库诊断与复现规划领域的 prompt 和静态分析工具，避免重写通用 Agent 基础设施。
+
+## V0.1 新增内容
+
+- 将 system prompt 调整为 RepoPilot AI/ML codebase diagnosis and reproduction planning assistant。
+- 新增仓库结构分析工具 `repo_map`。
+- 新增运行入口识别工具 `entry_detector`。
+- 新增依赖环境和复现风险检查工具 `env_checker`。
+- 提供 one-shot demo prompt 和诊断报告格式。
+- 保留 CoreCoder 原有读写、搜索、Shell、子 Agent 和会话功能。
+
+V0.1 聚焦“复现前诊断”：三个新增工具只读取本地仓库内容，不执行项目代码、训练任务或文件下载。
 
 ## Architecture
 
-The whole thing fits in your head:
-
-```
-corecoder/
-├── cli.py            REPL + commands               218 lines
-├── agent.py          Agent loop + parallel tools    122 lines
-├── llm.py            Streaming client + retry       156 lines
-├── context.py        3-layer compression            196 lines
-├── session.py        Save/resume                     68 lines
-├── prompt.py         System prompt                   33 lines
-├── config.py         Env config                      55 lines
-└── tools/
-    ├── bash.py       Shell + safety + cd tracking   115 lines
-    ├── edit.py       Search-replace + diff            85 lines
-    ├── read.py       File reading                     53 lines
-    ├── write.py      File writing                     36 lines
-    ├── glob_tool.py  File search                      47 lines
-    ├── grep.py       Content search                   78 lines
-    └── agent.py      Sub-agent spawning               58 lines
+```text
+User Request
+    -> RepoPilot Prompt
+    -> CoreCoder Agent Loop
+    -> repo_map / entry_detector / env_checker
+    -> LLM Summary
+    -> Reproducibility Diagnosis Report
 ```
 
-## Use as a Library
+## 三个诊断工具
 
-```python
-from corecoder import Agent, LLM
+### `repo_map`
 
-llm = LLM(model="kimi-k2.5", api_key="your-key", base_url="https://api.moonshot.ai/v1")
-agent = Agent(llm=llm)
-response = agent.chat("find all TODO comments in this project and list them")
+扫描有限深度的目录树，统计 Python 文件，并通过 AST 提取顶层 class、function 和 import。它还会检测 README、依赖文件、Dockerfile 和 `configs` 目录。
+
+主要参数：
+
+- `root_path`：仓库路径，默认当前目录。
+- `max_depth`：扫描深度，默认 3。
+- `max_files`：最多分析的文件数，默认 80。
+
+### `entry_detector`
+
+扫描常见入口文件以及 `scripts/*.py`、`tools/*.py`，检查：
+
+- `if __name__ == "__main__"`
+- `argparse`、`click`、`typer`
+- `train`、`evaluate`、`eval`、`infer`、`inference`、`demo`、`main` 等函数
+
+输出入口类型、置信度和判断理由。
+
+### `env_checker`
+
+检查 requirements、pyproject、conda、setup、Docker、README 等文件，提取：
+
+- Python 版本声明
+- PyTorch 和常见 AI/ML 依赖
+- CUDA/GPU 提示
+- 数据集、checkpoint、预训练权重和 model zoo 线索
+- 环境完整度与 low/medium/high 风险等级
+
+## CLI Usage
+
+```text
+corecoder [-m MODEL] [--base-url BASE_URL] [--api-key API_KEY]
+          [-p PROMPT] [-r SESSION_ID]
 ```
 
-## Add Your Own Tools (~20 lines)
+- `-m, --model`：指定模型名称。
+- `--base-url`：指定 OpenAI-compatible API 地址。
+- `--api-key`：临时指定 API Key；优先使用环境变量或本地 `.env`。
+- `-p, --prompt`：执行 one-shot 诊断任务。
+- `-r, --resume`：恢复已保存的会话。
 
-```python
-from corecoder.tools.base import Tool
+CLI 命令名和 Python 包名仍保持为 `corecoder`，以维持与上游项目的兼容性。
 
-class HttpTool(Tool):
-    name = "http"
-    description = "Fetch a URL."
-    parameters = {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]}
+## Demo 命令
 
-    def execute(self, url: str) -> str:
-        import urllib.request
-        return urllib.request.urlopen(url).read().decode()[:5000]
+在待分析仓库根目录运行：
+
+```bash
+corecoder -m deepseek-chat -p "请使用 repo_map、entry_detector、env_checker 分析当前仓库，并生成 RepoPilot 代码仓库诊断与复现规划报告。报告包括 Repository Overview、Entry Points、Environment Check、Reproduction Plan、Reproduction Risks、Suggested Fixes。"
 ```
 
-## Commands
+完整提示词见 `examples/repopilot_demo_prompt.md`。
 
-```
-/model           Show current model
-/model <name>    Switch model mid-conversation
-/compact         Compress context (like Claude Code's /compact)
-/tokens          Token usage + cost estimate
-/diff            Show files modified this session
-/save            Save session to disk
-/sessions        List saved sessions
-/reset           Clear history
-quit             Exit
+分析指定仓库：
+
+```bash
+corecoder -m deepseek-chat -p "请仅做静态分析，使用 repo_map、entry_detector、env_checker 分析 D:/repos/example-paper，并生成复现诊断报告。不要执行训练，不要下载数据集或模型权重。"
 ```
 
-Saved session IDs are sanitized before they become filenames, so resume data stays inside `~/.corecoder/sessions`.
+将外部仓库诊断报告保存为文件：
 
-## How It Compares
+```bash
+corecoder -m deepseek-chat -p "请使用 repo_map、entry_detector、env_checker 分析 D:/repos/example-paper，并将最终报告写入 reports/sample_external_report.md。不要执行训练，不要下载数据集或模型权重。"
+```
 
-|  | Claude Code | Claw-Code | Aider | CoreCoder |
-|---|---|---|---|---|
-| Code | 512K lines (closed) | 100K+ lines | 50K+ lines | **~1,400 lines** |
-| Models | Anthropic only | Multi | Multi | **Any OpenAI-compatible** |
-| Readable? | No | Hard | Medium | **One afternoon** |
-| Purpose | Use it | Use it | Use it | **Understand it, build yours** |
+## 报告样例
 
-## The Deep Dive
+```markdown
+# RepoPilot Reproducibility Diagnosis
 
-I wrote [7 articles](article/) breaking down Claude Code's architecture — the agent loop, tool system, context compression, streaming executor, multi-agent, and 44 hidden feature flags. If you want to understand *why* CoreCoder is designed this way, start there.
+## Repository Overview
+- Confirmed: `train.py`、`configs/` 和 `requirements.txt` 存在。
+- Inferred: 项目可能使用配置驱动训练。
 
-## FAQ
+## Entry Points
+- Training: `train.py`，high confidence。
+- Inference: `demo.py`，medium confidence。
 
-**Does CoreCoder support Skills / Subagents / MCP?**
+## Environment Check
+- `torch` 已声明，但未固定版本。
+- README 提到 CUDA，未给出明确 CUDA/PyTorch 对应关系。
 
-No, and that's intentional. CoreCoder is the minimal runnable core — agent loop, tools, streaming, compaction. Skills, Subagents, MCP, hooks, and plugins are upper-layer features that Claude Code layers on top; if CoreCoder had them too it would stop being a teaching artifact. The architecture articles above cover how those systems work in Claude Code, so you can add them yourself if you need to.
+## Reproduction Plan
+1. 创建隔离 Python 环境。
+2. 安装固定版本依赖。
+3. 按 README 准备数据集和 checkpoint。
+4. 先运行帮助命令或轻量推理验证入口。
 
-If you want Skills specifically, the recipe is small: scan `~/.claude/skills/*.md` at startup, list their titles in the system prompt, and let the agent ask for a skill by name before you inline that file's body into the conversation.
+## Reproduction Risks
+- High: 数据集下载地址和目录结构未确认。
+- Medium: PyTorch/CUDA 版本未固定。
 
-## Related Projects
+## Suggested Fixes
+- 增加带版本约束的环境文件。
+- 补充数据目录、权重校验值和最小推理命令。
+```
 
-- **[CodeJoust](https://github.com/he-yufeng/CodeJoust)** — a CLI arena that races Claude Code, aider, Codex, and Gemini (Cursor + OpenHands next) on the same bug in isolated git worktrees, scores by tests+cost+diff+time, hands you the winning patch. If you ever wondered *which* AI coding CLI is actually better for your task, CodeJoust answers it empirically.
-- **[AnyCoder](https://github.com/he-yufeng/AnyCoder)** — a practical terminal AI coding agent built on the same architecture as CoreCoder but with litellm, session persistence, and 100+ model support. Use this one if you want a tool; use CoreCoder if you want to read source.
-- **[LiteBench](https://github.com/he-yufeng/LiteBench)** — one-command LLM / agent benchmark. Ships 7 built-in tasks (HumanEval/GSM8K/MMLU/...) and YAML-defined custom tasks, with a single-file HTML dashboard.
-- **[RepoWiki](https://github.com/he-yufeng/RepoWiki)** — open-source DeepWiki alternative. `pip install repowiki`, one command to turn any local or GitHub repo into a wiki with dependency graph, architecture diagram, and LLM-generated module pages.
+静态报告只能说明仓库中可确认的证据，不能替代实际运行验证。
 
-## License
+## 当前限制
 
-MIT. Fork it, learn from it, ship something better. A mention of this project is appreciated.
+- 主要分析 Python 和常见 AI/ML 项目文件，无法覆盖所有语言与自定义构建系统。
+- 入口类型和风险等级来自静态规则，可能需要人工复核。
+- 不验证依赖是否真的可安装，也不验证 CUDA、GPU 和驱动的运行时兼容性。
+- 不执行训练、推理或数据预处理，因此不宣称目标仓库已经成功复现。
+- 不自动下载数据集、checkpoint 或预训练权重。
 
----
+## 测试结果
 
-Built by **[Yufeng He](https://github.com/he-yufeng)** · Agentic AI Researcher @ Moonshot AI (Kimi)
+在当前开发环境下测试通过：`python -m pytest`，`68 passed`。
 
-[Claude Code Source Analysis — 170K+ reads, 6000 bookmarks on Zhihu](https://zhuanlan.zhihu.com/p/1898797658343862272)
+基础语法检查：
+
+```bash
+python -m compileall corecoder
+```
+
+## 后续计划
+
+- 支持更细粒度的配置文件分析。
+- 识别数据目录约定和 checkpoint 加载链路。
+- 生成环境锁定建议和最小 smoke test。
+- 增加常见论文仓库的诊断测试集。
+- 支持输出机器可读的 JSON 报告。
+
+## 项目亮点总结
+
+RepoPilot 基于 CoreCoder Agent 架构二次开发，面向 AI/ML 开源代码仓库提供复现前静态诊断与规划能力。项目通过自定义 Tool 接入仓库结构映射、运行入口识别、依赖环境检查与数据/权重/CUDA 风险分析，并由 LLM 汇总为证据驱动的复现计划和风险报告。
+
+## 上游说明与致谢
+
+本项目基于 [CoreCoder](https://github.com/he-yufeng/CoreCoder) fork 改造，复用了其 Agent loop、LLM 适配、工具系统、上下文压缩、会话机制以及基础 CLI 能力。RepoPilot 的领域 prompt、`repo_map`、`entry_detector`、`env_checker` 和仓库诊断文档属于本次扩展，但本项目不宣称整体架构完全原创。
+
+感谢 CoreCoder 原作者 [Yufeng He（何宇峰）](https://github.com/he-yufeng) 开源这一简洁、易读的 Agent 基础项目。请同时参考 [`README_CORECODER.md`](README_CORECODER.md)，并遵守仓库中的 MIT License、原始版权声明和署名要求。
