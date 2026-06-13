@@ -1,10 +1,11 @@
-# ReproCoder Research Code Reproduction Diagnosis Report
+# RepoPilot V0.2 Research Code Reproduction Diagnosis Report
 
 **Repository**: ExternalDemo-pytorch-cifar  
 **Path**: `D:\AIProjects\ExternalDemo-pytorch-cifar`  
-**Analysis Date**: Manual demo report  
-**Tools**: repo_map, entry_detector, env_checker  
-**Mode**: Static analysis (no code execution, no data download, no training)
+**Tools**: repo_map, entry_detector, env_checker, smoke_test_planner
+**Analysis Mode**: Static analysis only
+**Smoke Tests**: Suggested only, not executed
+**Full Reproduction**: Unverified
 
 ---
 
@@ -109,6 +110,8 @@ Models are selected by uncommenting lines 57-71 in `main.py`. Currently `SimpleD
 - Python 3.6+
 - PyTorch 1.0+
 
+The README declares Python 3.6+, but this is an old PyTorch 1.0-era project. Modern Python versions such as Python 3.13 may cause dependency compatibility issues because older PyTorch and torchvision releases do not support Python 3.13. A Python 3.8-3.10 environment is safer for reproduction.
+
 **Actual dependencies detected in code:**
 
 | Dependency | Version Requirement | Evidence |
@@ -155,7 +158,7 @@ pip install torch torchvision
 
 ```bash
 cd D:\AIProjects\ExternalDemo-pytorch-cifar
-# No additional downloads needed -- code is complete
+# Source code is present; CIFAR-10 data may still need separate preparation.
 ```
 
 ### Step 3: Select Model
@@ -198,7 +201,7 @@ python main.py --resume --lr=0.01
 | ID | Risk Description | Impact | Evidence |
 |----|-----------------|--------|----------|
 | **R1** | **No requirements.txt / environment lock** | Inconsistent dependency versions may cause training failure or irreproducible results | All environment files missing |
-| **R2** | **`utils.py` line 45: `stty size` crashes on Windows** | Script crashes on Windows when `progress_bar` is called | `os.popen('stty size', 'r').read().split()` is Linux/macOS only |
+| **R2** | **`utils.py` line 45 uses the platform-specific `stty size` command** | Importing `utils.py` or running `main.py` may fail on Windows if `stty` is unavailable or returns no terminal size output | `os.popen('stty size', 'r').read().split()` is Unix-oriented |
 | **R3** | **`init.kaiming_normal` is deprecated** | Newer PyTorch versions renamed it to `kaiming_normal_`; triggers warnings or errors | `utils.py` line 33 |
 
 ### MEDIUM Risk
@@ -224,23 +227,14 @@ python main.py --resume --lr=0.01
 
 ### Fix R2: Windows Compatibility -- `stty size`
 
-**Problem**: `utils.py` line 45: `os.popen('stty size', 'r').read().split()` does not exist on Windows.
+**Problem**: `utils.py` uses `os.popen('stty size', 'r').read().split()`, which may fail on Windows because `stty` is unavailable or returns no terminal size output. Possible failure modes include shell command failure or unpacking empty output.
 
 **Fix**: Add cross-platform terminal width detection:
 
 ```python
-# Replace utils.py lines 44-46 with:
-try:
-    # Linux/macOS
-    _, term_width = os.popen('stty size', 'r').read().split()
-    term_width = int(term_width)
-except:
-    # Windows fallback
-    try:
-        from shutil import get_terminal_size
-        term_width = get_terminal_size().columns
-    except:
-        term_width = 80  # default fallback
+import shutil
+
+term_width = shutil.get_terminal_size((80, 20)).columns
 ```
 
 ### Fix R3: `init.kaiming_normal` Deprecation
@@ -303,15 +297,65 @@ Consider adding a simple YAML or JSON config file to manage experiment parameter
 
 ---
 
-## 7. Summary
+## 7. Smoke Test Plan
+
+> Suggested only, not executed. No target code, training, download, or smoke-test command was run.
+
+### Preflight Checks
+
+- `python --version`
+- `python -c "import torch; print(torch.__version__)"`
+- `python -c "import torch; print(torch.cuda.is_available())"`
+
+### Import Checks
+
+- `python -c "import models; print('models OK')"`
+
+  Expected: likely pass if PyTorch is installed. Importing `models` does not by itself establish that `utils.py` is imported.
+
+- `python -c "import utils"`
+
+  Expected: may fail on Windows because `utils.py` executes the `stty size` terminal-width lookup at import time.
+
+### CLI Checks
+
+- `python main.py --help`
+
+This command should be reviewed before execution because `main.py` imports `utils.py` and performs substantial module-level setup before argument parsing. It may encounter the `stty` issue before displaying help.
+
+### Safe Runtime Checks
+
+- Prefer a CPU-only environment for initial import checks.
+- CIFAR-10 preparation may require download, but RepoPilot does not execute download commands.
+- Do not run `python main.py` directly as a smoke test because it starts the default 200-epoch training loop and may trigger dataset download.
+- A later lightweight runtime check would require adding explicit options such as `--epochs 1` and `--cpu`; these options are not currently available and are not presented here as executable commands.
+- Confirm the checkpoint path before testing `--resume`.
+
+### Expected Failures
+
+- `python -c "import utils"`, `python main.py --help`, and `python main.py` may fail on Windows because `stty` may be unavailable or return empty output.
+- Dependency versions are not locked.
+- Python, PyTorch, torchvision, and CUDA compatibility remains unresolved; Python 3.8-3.10 is a safer starting range than Python 3.13 for this older project.
+
+### Verification Status
+
+- Static evidence: available
+- Smoke-test verified: not executed
+- Full reproduction: unverified
+
+---
+
+## 8. Summary
 
 | Dimension | Assessment |
 |-----------|-----------|
 | **Code Completeness** | [OK] Complete, includes 18 model implementations |
 | **Documentation Clarity** | [OK] README clearly describes usage and expected accuracy |
 | **Environment Reproducibility** | [FAIL] No dependency lock files; Windows compatibility issues exist |
-| **Out-of-box Usability** | [WARN] Works on Linux/macOS; needs `stty` fix on Windows |
+| **Out-of-box Usability** | [WARN] Static analysis suggests a likely Windows `stty` issue; runtime behavior remains unverified |
 | **Result Reproducibility** | [WARN] No random seed fixed; results may vary |
-| **Overall Reproduction Difficulty** | **Low** (Linux/macOS) / **Medium** (Windows) |
+| **Estimated Reproduction Difficulty** | Static analysis suggests **Low** (Linux/macOS) / **Medium** (Windows), pending runtime verification |
 
 **Core Recommendations**: After fixing the `stty size` Windows compatibility issue (R2), dependency pinning, and deprecated PyTorch API usage (R3), the project appears likely to be reproducible on Linux/macOS. However, this conclusion is based on static analysis only and still requires actual runtime verification.
+
+No training, data download, smoke-test execution, or target repository modification was performed. Full reproduction remains unverified.

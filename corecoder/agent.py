@@ -11,7 +11,7 @@ which means it's done working and ready to report back.
 
 import concurrent.futures
 from .llm import LLM
-from .tools import ALL_TOOLS, get_tool
+from .tools import ALL_TOOLS
 from .tools.base import Tool
 from .tools.agent import AgentTool
 from .prompt import system_prompt
@@ -28,6 +28,7 @@ class Agent:
     ):
         self.llm = llm
         self.tools = tools if tools is not None else ALL_TOOLS
+        self.tool_map = {tool.name: tool for tool in self.tools}
         self.messages: list[dict] = []
         self.context = ContextManager(max_tokens=max_context_tokens)
         self.max_rounds = max_rounds
@@ -92,7 +93,7 @@ class Agent:
 
     def _exec_tool(self, tc) -> str:
         """Execute a single tool call, returning the result string."""
-        tool = get_tool(tc.name)
+        tool = self.tool_map.get(tc.name)
         if tool is None:
             return f"Error: unknown tool '{tc.name}'"
         try:

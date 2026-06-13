@@ -9,7 +9,7 @@ from corecoder.tools import ALL_TOOLS, get_tool
 
 
 def test_tool_count():
-    assert len(ALL_TOOLS) == 10
+    assert len(ALL_TOOLS) == 11
 
 
 def test_all_tools_have_valid_schema():
@@ -187,7 +187,7 @@ def test_agent_tool_schema():
     assert "task" in s["function"]["parameters"]["properties"]
 
 
-# --- ReproCoder static analysis tools ---
+# --- RepoPilot static analysis tools ---
 
 def test_repo_map_tool(tmp_path):
     (tmp_path / "train.py").write_text("import torch\n\ndef train():\n    pass\n")
@@ -207,6 +207,16 @@ def test_entry_detector_tool(tmp_path):
     assert "high" in result
 
 
+def test_entry_detector_extracts_readme_command(tmp_path):
+    (tmp_path / "main.py").write_text(
+        "def main():\n    pass\n\n"
+        'if __name__ == "__main__":\n    main()\n'
+    )
+    (tmp_path / "README.md").write_text("Run with `python main.py --config demo.yaml`.\n")
+    result = get_tool("entry_detector").execute(root_path=str(tmp_path))
+    assert "python main.py --config demo.yaml" in result
+
+
 def test_env_checker_tool(tmp_path):
     (tmp_path / "requirements.txt").write_text("torch==2.2.0\nnumpy>=1.24\n")
     (tmp_path / "README.md").write_text("Python 3.10, CUDA 12.1, download checkpoint\n")
@@ -214,3 +224,22 @@ def test_env_checker_tool(tmp_path):
     assert "# Environment Check" in result
     assert "torch" in result
     assert "CUDA" in result
+    assert "Structured Risks" in result
+    assert "Evidence" in result
+
+
+def test_smoke_test_planner(tmp_path):
+    (tmp_path / "models.py").write_text("import torch\n")
+    (tmp_path / "main.py").write_text(
+        "import argparse\nimport torch\n"
+        "parser = argparse.ArgumentParser()\n"
+        'parser.add_argument("--epochs", type=int, default=200)\n'
+        'if __name__ == "__main__":\n    parser.parse_args()\n'
+    )
+    result = get_tool("smoke_test_planner").execute(root_path=str(tmp_path))
+    assert "# Smoke Test Plan" in result
+    assert "Preflight Checks" in result
+    assert "Import Checks" in result
+    assert "CLI Checks" in result
+    assert "Verification Status" in result
+    assert "not executed" in result

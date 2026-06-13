@@ -10,6 +10,7 @@ from .agent import AgentTool
 from .repo_map import RepoMapTool
 from .entry_detector import EntryDetectorTool
 from .env_checker import EnvCheckerTool
+from .smoke_test_planner import SmokeTestPlannerTool
 
 ALL_TOOLS = [
     BashTool(),
@@ -22,6 +23,7 @@ ALL_TOOLS = [
     RepoMapTool(),
     EntryDetectorTool(),
     EnvCheckerTool(),
+    SmokeTestPlannerTool(),
 ]
 
 

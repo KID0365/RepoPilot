@@ -6,7 +6,9 @@ import pathlib
 from corecoder import Agent, LLM, Config, ALL_TOOLS, __version__
 from corecoder.context import ContextManager, estimate_tokens
 from corecoder.session import save_session, load_session, list_sessions
+from corecoder.llm import ToolCall
 from corecoder.tools import get_tool
+from corecoder.tools.base import Tool
 
 
 def test_version():
@@ -18,7 +20,7 @@ def test_public_api_exports():
     assert Agent is not None
     assert LLM is not None
     assert Config is not None
-    assert len(ALL_TOOLS) == 10
+    assert len(ALL_TOOLS) == 11
 
 
 def test_config_from_env():
@@ -151,3 +153,17 @@ def test_write_tracks_changed_files(tmp_path):
     write.execute(file_path=str(path), content="tracked\n")
     assert any("tracked" not in p and path.name in p for p in _changed_files) or len(_changed_files) > 0
     _changed_files.clear()
+
+
+def test_agent_uses_instance_tool_map():
+    class CustomTool(Tool):
+        name = "custom_only"
+        description = "Test custom tool."
+        parameters = {"type": "object", "properties": {}, "required": []}
+
+        def execute(self) -> str:
+            return "custom tool result"
+
+    agent = Agent(llm=object(), tools=[CustomTool()])
+    call = ToolCall(id="test", name="custom_only", arguments={})
+    assert agent._exec_tool(call) == "custom tool result"
