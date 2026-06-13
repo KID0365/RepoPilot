@@ -22,30 +22,30 @@
 
 ```
 ExternalDemo-pytorch-cifar/
-©À©¤©¤ LICENSE
-©À©¤©¤ README.md
-©À©¤©¤ main.py                  # Training/testing main script
-©À©¤©¤ utils.py                 # Helper functions (init, progress bar, etc.)
-©¸©¤©¤ models/
-    ©À©¤©¤ __init__.py           # Unified model exports
-    ©À©¤©¤ vgg.py
-    ©À©¤©¤ resnet.py
-    ©À©¤©¤ preact_resnet.py
-    ©À©¤©¤ resnext.py
-    ©À©¤©¤ densenet.py
-    ©À©¤©¤ mobilenet.py
-    ©À©¤©¤ mobilenetv2.py
-    ©À©¤©¤ dpn.py
-    ©À©¤©¤ senet.py
-    ©À©¤©¤ shufflenet.py
-    ©À©¤©¤ shufflenetv2.py
-    ©À©¤©¤ efficientnet.py
-    ©À©¤©¤ regnet.py
-    ©À©¤©¤ googlenet.py
-    ©À©¤©¤ lenet.py
-    ©À©¤©¤ pnasnet.py
-    ©À©¤©¤ dla.py
-    ©¸©¤©¤ dla_simple.py
+|-- LICENSE
+|-- README.md
+|-- main.py                  # Training/testing main script
+|-- utils.py                 # Helper functions (init, progress bar, etc.)
+`-- models/
+    |-- __init__.py           # Unified model exports
+    |-- vgg.py
+    |-- resnet.py
+    |-- preact_resnet.py
+    |-- resnext.py
+    |-- densenet.py
+    |-- mobilenet.py
+    |-- mobilenetv2.py
+    |-- dpn.py
+    |-- senet.py
+    |-- shufflenet.py
+    |-- shufflenetv2.py
+    |-- efficientnet.py
+    |-- regnet.py
+    |-- googlenet.py
+    |-- lenet.py
+    |-- pnasnet.py
+    |-- dla.py
+    `-- dla_simple.py
 ```
 
 ---

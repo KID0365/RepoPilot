@@ -99,11 +99,25 @@ class RepoMapTool(Tool):
             lines.append("- (empty directory)")
         else:
             entries = [(path, True) for path in dirs] + [(path, False) for path in files]
-            for path, is_dir in sorted(entries, key=lambda item: item[0].as_posix().lower()):
-                depth = len(path.parts) - 1
-                indent = "  " * depth
-                suffix = "/" if is_dir else ""
-                lines.append(f"{indent}- `{path.as_posix()}{suffix}`")
+            children: dict[Path, list[tuple[Path, bool]]] = {}
+            for path, is_dir in entries:
+                children.setdefault(path.parent, []).append((path, is_dir))
+
+            def append_tree(parent: Path, prefix: str = "") -> None:
+                siblings = sorted(
+                    children.get(parent, []),
+                    key=lambda item: item[0].name.lower(),
+                )
+                for index, (path, is_dir) in enumerate(siblings):
+                    is_last = index == len(siblings) - 1
+                    connector = "`-- " if is_last else "|-- "
+                    suffix = "/" if is_dir else ""
+                    lines.append(f"{prefix}{connector}{path.name}{suffix}")
+                    if is_dir:
+                        child_prefix = prefix + ("    " if is_last else "|   ")
+                        append_tree(path, child_prefix)
+
+            append_tree(Path("."))
 
         lines.extend(["", "## Python Overview"])
         if not python_files:
