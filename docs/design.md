@@ -1,132 +1,122 @@
-# RepoPilot Design
+# RepoPilot V1.0 架构与设计
 
-## 一句话定位
+## 项目定位
 
-RepoPilot 是一个面向 AI/ML 开源仓库的复现前诊断 Agent。它通过本地静态分析收集仓库结构、运行入口、环境依赖和复现风险证据，再由 LLM 整理为诊断报告与建议性的 Smoke Test Plan。
+RepoPilot 是面向 AI/ML 开源仓库的复现前诊断 Agent。它通过 static analysis 收集仓库结构、entry point、dependency 和复现风险证据，再由 LLM 整理为 reproduction planning 与 Markdown report。
+
+项目定位是“运行前诊断”，不是自动复现平台。
 
 ## 整体架构
 
 ```text
-User Prompt
-    -> CoreCoder CLI
-    -> Agent Loop
+用户 Prompt
+    -> corecoder CLI
+    -> CoreCoder Agent loop
     -> Tool Calling
     -> repo_map / entry_detector / env_checker / smoke_test_planner
-    -> Evidence-based Diagnosis
-    -> LLM Summary
-    -> Markdown Report
+    -> evidence-based diagnosis
+    -> LLM 汇总
+    -> Markdown report
 ```
 
-RepoPilot 没有重写通用 Agent 基础设施。CLI、Agent loop、LLM 适配、function calling、并行工具执行、上下文压缩和会话机制来自上游 CoreCoder；RepoPilot 在此基础上增加领域 prompt、四个诊断工具、结构化风险辅助模块和项目文档。
+RepoPilot 没有重新实现通用 Agent 基础设施。CLI、Agent loop、LLM 适配、Tool Calling、并行 Tool 执行、context compression 和 session 来自 CoreCoder；RepoPilot 增加领域 prompt、四个诊断 Tool、Evidence/Risk 辅助结构、测试和公开文档。
 
 ## 完整执行流程
 
 1. 用户通过 `corecoder` CLI 提交当前仓库或指定仓库的诊断任务。
-2. CLI 从参数和环境变量加载模型、API Key、API 地址等配置，并创建 LLM 与 Agent。
-3. Agent 将 RepoPilot system prompt、用户消息、对话历史和工具 schemas 一并发送给 LLM。
-4. LLM 根据任务决定是否调用 `repo_map`、`entry_detector`、`env_checker` 或 `smoke_test_planner`。
-5. Agent 执行工具，将返回文本作为 `tool` 消息加入对话，再次调用 LLM。
-6. 多个独立工具在同一轮被请求时，可由 CoreCoder 的线程池并行执行。
-7. LLM 根据工具证据继续读取文件、补充调查，或者生成最终 Markdown 报告。
-8. 当 LLM 不再返回 tool calls 时，Agent loop 结束，普通文本成为最终回答。
+2. CLI 从参数和环境变量加载模型、API 和其他配置，并创建 LLM 与 Agent。
+3. Agent 将 system prompt、用户消息、对话历史和 Tool schemas 发送给 LLM。
+4. LLM 根据任务选择 `repo_map`、`entry_detector`、`env_checker` 或 `smoke_test_planner`。
+5. Agent 解析 Tool Calling 参数并执行对应 Tool。
+6. Tool 结果作为 `tool` message 返回对话，Agent 再次调用 LLM。
+7. 同一轮中的多个独立 Tool 可以通过 CoreCoder 原有线程池并行执行。
+8. 当 LLM 不再返回 Tool Calling 时，普通文本成为最终 Markdown report。
 
-项目没有独立的模板化报告引擎。报告结构由 RepoPilot prompt、demo prompt、工具输出和 LLM 综合生成。
+RepoPilot 没有独立的模板化报告引擎。报告结构由 system prompt、Demo Prompt、Tool 输出和 LLM 综合生成。
 
-## CoreCoder Agent Loop 的复用
-
-CoreCoder 的核心循环可以概括为：
+## CoreCoder Agent loop 的复用
 
 ```text
-user message
-    -> LLM with tools
-    -> tool calls?
-        -> yes: execute tools -> append results -> call LLM again
-        -> no: return final text
+用户消息
+    -> LLM + Tool schemas
+    -> 是否返回 Tool Calling？
+        -> 是：执行 Tool -> 回填结果 -> 再次调用 LLM
+        -> 否：返回最终文本
 ```
 
-RepoPilot 保留了这一循环，没有为诊断场景另写调度器。领域能力通过工具注册进入同一 function-calling 协议，因此不会破坏上游的多轮对话、并行执行和上下文压缩机制。
+RepoPilot 保留这一核心循环。领域能力通过 Tool 接口进入现有协议，因此没有破坏上游的多轮对话、并行执行、context compression 和 session 机制。
 
-V0.2 对 Agent 层做过一个小修复：Agent 初始化时为当前实例建立 `tool_map`，工具执行从该映射查找，而不是强制依赖全局 `ALL_TOOLS`。默认行为不变，同时真正支持传入自定义工具列表。
+V0.2 曾对 Agent 做过一处小修复：Agent 初始化时建立实例级 `tool_map`，执行 Tool 时从当前实例映射查找，而不是只依赖全局 `ALL_TOOLS`。默认行为不变，但构造时传入的自定义 Tool 可以真正执行。
 
-## RepoPilot 工具如何接入
+## Tool 接入方式
 
-每个工具继承 `Tool`，声明：
+每个 Tool 继承 `Tool` 基类，并声明：
 
-- `name`：LLM 调用时使用的函数名。
-- `description`：告诉 LLM 工具解决什么问题。
-- `parameters`：输入参数的 JSON Schema。
-- `execute()`：执行静态分析并返回文本结果。
+- `name`
+- `description`
+- `parameters`
+- `execute()`
 
-工具实例注册到 `ALL_TOOLS` 后，Agent 会自动：
+Tool 注册到 `ALL_TOOLS` 后，Agent 会调用 `schema()` 生成 Tool Calling schema，将其发送给 LLM，并根据返回的名称与参数执行对应 Tool。
 
-1. 调用 `schema()` 生成 function-calling 描述；
-2. 将 schema 发送给 LLM；
-3. 接收模型返回的工具名和参数；
-4. 调用对应工具；
-5. 把工具结果放回对话。
-
-四个诊断工具的职责如下：
+四个诊断 Tool 的职责：
 
 ```text
 repo_map
     -> 仓库中有什么？
 
 entry_detector
-    -> 用户应从哪里启动训练、评估、推理或 Demo？
+    -> 训练、评估、推理和 Demo 从哪里启动？
 
 env_checker
-    -> 运行环境和外部资源有哪些静态风险？
+    -> dependency、CUDA、数据集和 checkpoint 有哪些 static risks？
 
 smoke_test_planner
     -> 正式运行前可以建议哪些低成本检查？
 ```
 
-## Evidence-based Diagnosis
+## evidence-based diagnosis
 
-RepoPilot 不要求 LLM 直接凭文件名或经验下结论，而是尽量让工具返回可追溯证据，例如：
+RepoPilot 不要求 LLM 仅凭经验下结论，而是尽量让 Tool 返回可追溯证据：
 
-- 文件路径和行号；
-- AST 中发现的函数、main guard 和 import；
-- README 中的调用命令；
-- 环境文件中解析出的依赖和版本约束；
-- 风险类型、严重程度、置信度、影响和修复建议。
+- 文件路径与行号
+- AST 中发现的 class、function、import 和 main guard
+- README 中的调用命令
+- 环境文件中的 dependency 与版本约束
+- structured risks 的类别、严重程度、置信度、影响和修复建议
 
-报告需要区分：
+Markdown report 需要区分：
 
-- **Confirmed facts**：工具或源码直接支持的事实。
-- **Inferred assumptions**：基于静态证据做出的合理推断。
-- **Static risks**：尚未通过运行验证的潜在风险。
-- **Suggested smoke tests**：只建议、不执行的低成本检查。
-- **Full reproduction unverified**：完整复现状态仍未验证。
+- **confirmed facts**：Tool 或源码直接支持的事实
+- **inferred assumptions**：基于静态证据做出的推断
+- **static risks**：尚未通过 runtime verification 的潜在风险
+- **suggested smoke tests**：只建议、不执行的检查
+- **full reproduction unverified**：完整复现仍未验证
 
-这种设计不能消除 LLM 错误，但可以减少无依据推断，并让用户能够回到原文件复核。
+这种设计不能完全消除 LLM 错误，但可以减少无依据推断，并让用户回到原始证据复核。
 
-## 为什么 Smoke Test Planner 只生成计划
+## smoke test plan 只生成不执行
 
-AI/ML 仓库的入口可能在导入阶段就产生副作用，例如：
+AI/ML 仓库可能在 import 或 `--help` 阶段产生副作用：
 
-- 自动下载数据集或模型权重；
-- 初始化 CUDA、分布式环境或多进程 DataLoader；
-- 直接进入数百轮训练；
-- 执行平台专属 Shell 命令；
-- 加载本地不存在的 checkpoint。
+- 下载数据集或模型权重
+- 初始化 CUDA、分布式环境或多进程 DataLoader
+- 直接进入长时间训练
+- 执行平台专属 Shell 命令
+- 加载不存在的 checkpoint
 
-因此 `smoke_test_planner` 只分析源码并生成建议命令，不调用 Bash 或 `subprocess`。计划必须明确标记为 `Suggested only, not executed`，避免把“建议运行”写成“已经通过”。
+因此 `smoke_test_planner` 只分析源码并生成建议，不调用 Bash、`subprocess` 或目标仓库入口。报告必须明确 smoke test 未执行。
 
-## 为什么不做自动训练和下载
+## 项目边界
 
-RepoPilot 的目标是复现前诊断，而不是自动复现平台。自动训练或下载会引入：
+RepoPilot 默认：
 
-- 不确定的 GPU、时间、网络和存储成本；
-- 外部代码执行和供应链风险；
-- 数据许可证与访问权限问题；
-- 无法统一控制的运行环境；
-- “命令启动成功”被误解为“论文结果复现成功”的风险。
+- 只做本地 static analysis
+- 不执行目标仓库代码
+- 不训练模型
+- 不下载数据集或 checkpoint
+- 不修改目标仓库
+- 不把 smoke test plan 表述为运行结果
+- 不把静态诊断表述为完整复现
 
-因此项目默认：
-
-- 不训练模型；
-- 不下载数据集或 checkpoint；
-- 不修改目标仓库；
-- 不把静态分析或 Smoke Test Plan 表述为成功复现；
-- 要求实际安装、运行、训练和指标复核由用户在受控环境中完成。
+实际安装、运行、训练、评估和指标核对需要用户在受控环境中完成。

@@ -12,7 +12,7 @@ from corecoder.tools.base import Tool
 
 
 def test_version():
-    assert __version__ == "0.3.0"
+    assert __version__ == "1.0.0"
 
 
 def test_public_api_exports():

@@ -1,89 +1,90 @@
-# RepoPilot Project Walkthrough
+# RepoPilot V1.0 技术导览
 
-## 项目定位
+## 30 秒概览
 
-RepoPilot 是基于 CoreCoder 二次开发的 AI/ML 开源仓库复现前诊断 Agent。它不尝试自动训练模型，而是先回答四个问题：
+RepoPilot 是基于 CoreCoder 二次开发的 AI/ML 仓库复现前诊断 Agent。它使用四个 static analysis Tool 分析仓库结构、entry point、dependency 和复现风险，再由 LLM 基于证据生成 reproduction planning 与 Markdown report。项目只提供诊断和 smoke test plan，不执行训练、下载或完整复现。
 
-1. 仓库中有哪些关键代码和配置？
-2. 训练、评估、推理和 Demo 从哪里启动？
-3. Python、PyTorch、CUDA、数据集和 checkpoint 条件是否清楚？
-4. 在正式运行前，可以建议哪些低成本检查？
+## 2 分钟技术导览
 
-输出是一份带证据的 Markdown 诊断报告。静态分析不能替代运行验证，因此报告始终保留 `Full Reproduction: Unverified`。
+AI/ML 开源仓库常见的问题不是缺少模型代码，而是运行入口、dependency 版本、CUDA、数据集和 checkpoint 信息分散。直接执行入口可能触发长时间训练、下载或平台兼容问题。
 
-## 架构概览
+RepoPilot 复用 CoreCoder 的 CLI、Agent loop、LLM 适配、Tool Calling、context compression 和 session，在此基础上增加四个领域 Tool：
 
-```text
-CLI
-  -> Agent Loop
-  -> LLM chooses tools
-  -> Static diagnosis tools
-  -> Tool evidence returns to conversation
-  -> LLM produces Markdown report
-```
+- `repo_map` 使用目录扫描和 AST 建立仓库地图
+- `entry_detector` 综合文件名、README 命令、main guard 和 CLI 框架识别 entry point
+- `env_checker` 解析环境文件并生成 structured risks
+- `smoke_test_planner` 只生成低成本 smoke test plan
 
-RepoPilot 的通用 Agent 骨架来自 CoreCoder。项目重点不是重新实现 LLM 客户端或 Agent loop，而是把 AI/ML 仓库复现前检查拆成稳定的领域工具，并规定证据与结论的边界。
+Tool 提供确定性证据，LLM 负责选择 Tool、综合证据和组织报告。报告必须区分 confirmed facts、inferred assumptions、static risks、suggested smoke tests 和 full reproduction unverified。
 
-## 核心模块
+## Agent 与 LLM
 
-### Agent 与 LLM
+`corecoder/agent.py` 负责多轮 Agent loop：调用 LLM、解析 Tool Calling、执行 Tool、回填结果，直到模型返回普通文本。
 
-`corecoder/agent.py` 负责多轮循环：调用 LLM、执行工具、回填结果，直到模型返回普通文本。`corecoder/llm.py` 负责流式响应、tool call 参数重组和重试。
+`corecoder/llm.py` 负责流式响应、Tool Calling 参数重组和重试。该模块主要来自 CoreCoder，不是 RepoPilot 的核心新增能力。
 
-V0.2 增加实例级 `tool_map`，使 Agent 真正能够执行构造时传入的工具集合。
+Agent 使用实例级 `tool_map` 执行构造时传入的 Tool，同时保持默认 `ALL_TOOLS` 行为。
+
+## 四个诊断 Tool
 
 ### `repo_map`
 
-扫描有限深度的目录树，跳过版本库、虚拟环境和缓存目录。对 Python 文件使用 AST 提取顶层类、函数和 import，并用 ASCII tree 输出目录结构。
+扫描有限深度目录树，跳过版本库、虚拟环境和缓存目录。对 Python 文件使用 AST 提取顶层 class、function 和 import，并使用 ASCII tree 输出结构。
 
 ### `entry_detector`
 
-综合常见文件名、README 命令、`__main__.py`、console scripts、main guard、CLI 框架和入口式函数，输出多标签入口及置信度证据。
+综合常见文件名、README 命令、`__main__.py`、console scripts、main guard、CLI 框架和入口式函数，输出多标签 entry point、建议命令和置信度证据。
+
+置信度表示 static evidence 的强弱，不表示命令运行成功率。
 
 ### `env_checker`
 
-使用标准库解析 `pyproject.toml`、`setup.cfg`、requirements 等环境信息，并将风险表示为包含 evidence、impact 和 remediation 的统一结构。
+使用标准库解析 `requirements.txt`、`pyproject.toml`、`setup.cfg`、`setup.py`、`environment.yml` 等文件，提取 Python、PyTorch、CUDA、数据集和 checkpoint 线索，并构建包含 evidence、impact 和 remediation 的 structured risks。
 
 ### `smoke_test_planner`
 
-根据 import、CLI、CUDA、下载、checkpoint 和长训练线索生成建议计划。它不运行目标代码，也不会生成下载或完整训练命令作为 smoke test。
+根据 import、CLI、CUDA、下载、checkpoint 和长训练信号生成 smoke test plan。它不运行目标代码，也不会把下载或完整训练命令作为默认 smoke test。
 
 ## 设计取舍
 
-### 复用 CoreCoder，而不是从零开始
+### 基于 CoreCoder 扩展
 
-CoreCoder 已经提供了可读的 Agent loop、工具协议、上下文管理和会话能力。复用这些基础设施，可以把开发重点放在垂直领域问题上，也能清楚说明哪些来自上游、哪些属于 RepoPilot。
+CoreCoder 已提供清晰的 Agent loop 和 Tool 协议。复用上游能力可以把项目范围集中在 AI/ML 仓库诊断，并清楚区分上游基础与 RepoPilot 新增部分。
 
-### 静态工具优先，而不是完全依赖 LLM
+### Tool 优先于纯 LLM 推断
 
-目录遍历、AST 和配置解析属于确定性任务。将这些工作放进工具，通常比让 LLM 反复调用 `grep` 和 `read_file` 更稳定、更节省上下文，也更容易测试。
+目录遍历、AST 和配置解析属于确定性任务。将这些工作放入 Tool，比让 LLM 反复读取和搜索文件更稳定、更节省 context，也更容易测试。
 
-### Markdown 外部接口，结构化内部风险
+### evidence-based diagnosis
 
-工具继续返回 Markdown，兼容 CoreCoder 的字符串工具协议；风险在内部先使用统一字典构建，再格式化输出。这样避免大规模改动，同时提高报告一致性。
+报告结论尽量关联路径、行号、配置项和原始命令。LLM 负责表达，Tool 负责提供可复核证据。
+
+### Markdown 外部接口
+
+Tool 继续返回 Markdown，兼容 CoreCoder 的字符串 Tool 协议；structured risks 在内部先以统一 Evidence/Risk 结构构建，再格式化输出。
 
 ### 计划与执行分离
 
-外部 AI/ML 仓库可能包含下载、GPU 初始化、长训练和平台专属命令。V0.3 仍坚持只生成 Smoke Test Plan，不执行建议命令。
+外部仓库可能包含下载、GPU 初始化、长训练和平台专属命令。RepoPilot V1.0 只生成 smoke test plan，不执行建议命令。
 
 ## 项目边界
 
-RepoPilot 能提供静态证据和复现前计划，但不能证明：
+RepoPilot 能提供 static evidence 和 reproduction planning，但不能证明：
 
-- 依赖一定可以安装；
-- CUDA 与驱动一定兼容；
-- 数据和权重一定可访问；
-- 训练一定能够收敛；
-- README 指标一定能够复现。
+- dependency 一定可以安装
+- CUDA 与驱动一定兼容
+- 数据集和 checkpoint 一定可访问
+- 训练一定能够收敛
+- README 指标一定能够复现
 
-报告中的 high/medium/low 和 confidence 是规则化静态判断，不是运行成功概率。
+报告中的严重程度和 confidence 是规则化 static analysis 结果，不是运行成功概率。
 
-## 后续计划
+## 当前限制与可能扩展
 
-V1.0 前更重要的是提高工程可信度，而不是继续堆工具：
+- static analysis 可能误报或漏报
+- 非 Python 项目与复杂配置支持有限
+- 尚未构建完整调用图
+- 尚无稳定 JSON report
+- 尚未在真实仓库基准集上量化准确率
 
-- 建立代表性仓库回归样本；
-- 增加误报和边界测试；
-- 定义可选机器可读报告；
-- 统一发布说明、版本记录和文档；
-- 继续保留上游 CoreCoder attribution。
+后续可以增加真实仓库回归集、边界测试和可选机器可读输出，但这些不属于 V1.0 当前能力。

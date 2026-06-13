@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "corecoder"
-version = "0.3.0"
-description = "Minimal AI coding agent (~1400 LoC) inspired by Claude Code. Works with any LLM. (formerly NanoCoder)"
+version = "1.0.0"
+description = "RepoPilot: an AI/ML codebase diagnosis and reproduction planning agent built on CoreCoder"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
@@ -14,7 +14,7 @@ authors = [
 ]
 keywords = ["ai", "agent", "coding", "cli", "llm", "claude-code"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",

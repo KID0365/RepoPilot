@@ -23,7 +23,7 @@ console = Console()
 def _parse_args():
     p = argparse.ArgumentParser(
         prog="corecoder",
-        description="Minimal AI coding agent. Works with any OpenAI-compatible LLM.",
+        description="RepoPilot AI/ML codebase diagnosis and reproduction planning agent.",
     )
     p.add_argument("-m", "--model", help="Model name (default: $CORECODER_MODEL or gpt-4o)")
     p.add_argument("--base-url", help="API base URL (default: $OPENAI_BASE_URL)")
@@ -110,7 +110,7 @@ def _run_once(agent: Agent, prompt: str):
 def _repl(agent: Agent, config: Config):
     """Interactive read-eval-print loop."""
     console.print(Panel(
-        f"[bold]CoreCoder[/bold] v{__version__}\n"
+        f"[bold]RepoPilot[/bold] v{__version__}  [dim](CLI: corecoder)[/dim]\n"
         f"Model: [cyan]{config.model}[/cyan]"
         + (f"  Base: [dim]{config.base_url}[/dim]" if config.base_url else "")
         + "\nType [bold]/help[/bold] for commands, [bold]Ctrl+C[/bold] to cancel, [bold]quit[/bold] to exit.",
